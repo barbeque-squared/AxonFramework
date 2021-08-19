@@ -78,7 +78,7 @@ public class AxonServerCommandBus implements CommandBus, Distributed<CommandBus>
     private final RoutingStrategy routingStrategy;
     private final CommandPriorityCalculator priorityCalculator;
     private final CommandLoadFactorProvider loadFactorProvider;
-
+    private final String context;
     private final DispatchInterceptors<CommandMessage<?>> dispatchInterceptors;
     private final TargetContextResolver<? super CommandMessage<?>> targetContextResolver;
     private final CommandCallback<Object, Object> defaultCommandCallback;
@@ -117,6 +117,7 @@ public class AxonServerCommandBus implements CommandBus, Distributed<CommandBus>
         this.defaultCommandCallback = builder.defaultCommandCallback;
         this.loadFactorProvider = builder.loadFactorProvider;
 
+
         String context;
         if (StringUtils.nonEmptyOrNull(builder.defaultContext)) {
             context = builder.defaultContext;
@@ -124,6 +125,7 @@ public class AxonServerCommandBus implements CommandBus, Distributed<CommandBus>
             context = configuration.getContext();
         }
 
+        this.context = context;
         this.targetContextResolver = builder.targetContextResolver.orElse(m -> context);
 
         this.executorService = builder.executorServiceBuilder.apply(
@@ -200,7 +202,7 @@ public class AxonServerCommandBus implements CommandBus, Distributed<CommandBus>
                              + "Expect similar logging on the local segment.", commandName);
         Registration localRegistration = localSegment.subscribe(commandName, messageHandler);
         io.axoniq.axonserver.connector.Registration serverRegistration =
-                axonServerConnectionManager.getConnection()
+                axonServerConnectionManager.getConnection(context)
                                            .commandChannel()
                                            .registerCommandHandler(
                                                    c -> {
@@ -240,8 +242,8 @@ public class AxonServerCommandBus implements CommandBus, Distributed<CommandBus>
      * handlers. This shutdown operation is performed in the {@link Phase#INBOUND_COMMAND_CONNECTOR} phase.
      */
     public CompletableFuture<Void> disconnect() {
-        if (axonServerConnectionManager.isConnected(axonServerConnectionManager.getDefaultContext())) {
-            return axonServerConnectionManager.getConnection().commandChannel().prepareDisconnect();
+        if (axonServerConnectionManager.isConnected(context)) {
+            return axonServerConnectionManager.getConnection(context).commandChannel().prepareDisconnect();
         }
         return CompletableFuture.completedFuture(null);
     }
@@ -315,12 +317,12 @@ public class AxonServerCommandBus implements CommandBus, Distributed<CommandBus>
         private RoutingStrategy routingStrategy;
         private CommandPriorityCalculator priorityCalculator =
                 CommandPriorityCalculator.defaultCommandPriorityCalculator();
-        private TargetContextResolver<? super CommandMessage<?>> targetContextResolver =
-                c -> configuration.getContext();
         private ExecutorServiceBuilder executorServiceBuilder =
                 ExecutorServiceBuilder.defaultCommandExecutorServiceBuilder();
         private CommandLoadFactorProvider loadFactorProvider = command -> CommandLoadFactorProvider.DEFAULT_VALUE;
         private String defaultContext;
+        private TargetContextResolver<? super CommandMessage<?>> targetContextResolver =
+                c -> StringUtils.nonEmptyOrNull(defaultContext) ? defaultContext : configuration.getContext();
 
         /**
          * Sets the {@link AxonServerConnectionManager} used to create connections between this application and an Axon
@@ -511,7 +513,7 @@ public class AxonServerCommandBus implements CommandBus, Distributed<CommandBus>
             assertNonNull(localSegment, "The Local CommandBus is a hard requirement and should be provided");
             assertNonNull(serializer, "The Serializer is a hard requirement and should be provided");
             assertNonNull(routingStrategy, "The RoutingStrategy is a hard requirement and should be provided");
-            assertNonNull(defaultContext, "The default context is a hard requirement and should be provided");
+            //assertNonNull(defaultContext, "The default context is a hard requirement and should be provided");
         }
     }
 }
